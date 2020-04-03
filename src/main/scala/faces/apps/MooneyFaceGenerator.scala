@@ -99,23 +99,10 @@ case class MooneyFaceGeneratorGUI(
     case _ => try{model.expressionModel.get.expression.rank} catch {case _: Exception => 0}
   }
 
-  // for illumination
-  val dir = "data/parameters"
-  val files = new File(dir).listFiles.filter(_.getName.endsWith(".rps")).toIndexedSeq
-  var allIllumination = files.map(f => {
-    val rps = RenderParameterIO.read(f).get
-    rps.environmentMap
-  })
-
-  var allIlluminationData = allIllumination.map(i => i.toBreezeVector)
-
-  val mnd = MultivariateNormalDistribution.estimateFromData(allIlluminationData)
-
-  val pcs: Seq[(DenseVector[Double], Double)] = mnd.principalComponents
 
 
   // vector holding the coefficients
-  var coeffs = DenseVector.fill(pcs.length){0.0}
+  var coeffs = DenseVector.fill(9){0.0}
   // scaling factor for sliders
   val sigFactor: Int = 100
   // the maximal sigma the sliders should reach
@@ -124,19 +111,13 @@ case class MooneyFaceGeneratorGUI(
   val mooneyRank: Int = 2
 
   var renderer: MoMoRenderer = MoMoRenderer(model, RGBA.BlackTransparent).cached(5)
-  // a matrix containing all eigenvectors
-  val pcM = DenseMatrix(pcs.map(p => p._1).toArray:_*).t
-  // a vector containing all squareroots of the eigenvalues to scale the coefficients
-  val sqrtEV = DenseVector(pcs.map(p => Math.sqrt(p._2)):_*)
 
-  // Changed to my illumination
-  val rndIllumminationPath = files(rnd.scalaRandom.nextInt(files.length))
+
 
   // Get illumination from coefficients and add illumination to set of renderParameters
   def addIllumination(c : DenseVector[Double])  = {
-    val scaledC = c *:* sqrtEV
-    val sHcoeffs = mnd.mean + pcM * scaledC
-    val newIllumination = SphericalHarmonicsLight.fromBreezeVector(sHcoeffs)
+    val rgbfromC = DenseVector(coeffs.toArray.map(c => Array(c,c,c)).flatten)
+    val newIllumination = SphericalHarmonicsLight.fromBreezeVector(rgbfromC)
     init = init.copy(environmentMap = newIllumination)
   }
 
@@ -238,7 +219,7 @@ case class MooneyFaceGeneratorGUI(
     changingSliders = false
   }
   // Illumination
-  val illuminationSlider: IndexedSeq[JSlider] = for (n <- 0 until pcs.length) yield {
+  val illuminationSlider: IndexedSeq[JSlider] = for (n <- 0 until coeffs.length) yield {
     GUIBlock.slider(-maximalSigma * sigFactor, maximalSigma * sigFactor, 0, f => {
       updateIll(n, f)
       updateImage()
@@ -267,7 +248,7 @@ case class MooneyFaceGeneratorGUI(
 
   def setIllSliders() = {
     changingSliders = true
-    (0 until pcs.length).foreach(i => {
+    (0 until coeffs.length).foreach(i => {
       illuminationSlider(i).setValue(Math.round(coeffs(i) * sigFactor).toInt)
     })
     changingSliders = false
@@ -275,12 +256,12 @@ case class MooneyFaceGeneratorGUI(
   }
 
   def randomIllumination() = {
-    coeffs = DenseVector.fill(pcs.length){rnd.scalaRandom.nextGaussian}
+    coeffs = DenseVector.fill(coeffs.length){rnd.scalaRandom.nextGaussian}
     setIllSliders()
   }
 
   def resetIllumination() = {
-    coeffs = DenseVector.fill(pcs.length){0.0}
+    coeffs = DenseVector.fill(coeffs.length){0.0}
     setIllSliders()
   }
 
